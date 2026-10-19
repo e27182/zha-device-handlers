@@ -12,7 +12,6 @@ from zhaquirks.builder import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
-    UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
@@ -570,7 +569,8 @@ class TuyaElectricalMeasurement(ElectricalMeasurement, TuyaLocalCluster):
 )
 
 (
-    TuyaQuirkBuilder("_TZE284_pglpvdar", "TS0601")
+    TuyaQuirkBuilder("_TZE284_pglpvdar", "TS0601")  # TOSA1-01WXJAT1A, single wire
+    .applies_to("_TZE284_4hdbt6rn", "TS0601")  # TOSA1-01WXJAT2A, two wire
     # Register DP 6 for the custom cluster to handle
     .tuya_dp_multi(
         dp_id=6,
@@ -627,26 +627,18 @@ class TuyaElectricalMeasurement(ElectricalMeasurement, TuyaLocalCluster):
         fallback_name="Remaining electricity",
     )
     # Advanced measurements
-    .tuya_sensor(
+    # Frequency and power factor go to the ElectricalMeasurement cluster, which ZHA
+    # already exposes: a tuya_sensor on the same name would create duplicate entities.
+    .tuya_dp(
         dp_id=32,
+        ep_attribute=TuyaElectricalMeasurement.ep_attribute,
         attribute_name="ac_frequency",
-        type=t.uint32_t,
-        device_class=SensorDeviceClass.FREQUENCY,
-        state_class=SensorStateClass.MEASUREMENT,
-        unit=UnitOfFrequency.HERTZ,
-        divisor=100,
-        fallback_name="Frequency",
-        translation_key="ac_frequency",
+        converter=lambda x: x / 100,
     )
-    .tuya_sensor(
+    .tuya_dp(
         dp_id=50,
+        ep_attribute=TuyaElectricalMeasurement.ep_attribute,
         attribute_name="power_factor",
-        type=t.uint32_t,
-        device_class=SensorDeviceClass.POWER_FACTOR,
-        state_class=SensorStateClass.MEASUREMENT,
-        divisor=100,
-        fallback_name="Power factor",
-        translation_key="power_factor",
     )
     .tuya_sensor(
         dp_id=131,
@@ -815,6 +807,9 @@ class TuyaElectricalMeasurement(ElectricalMeasurement, TuyaLocalCluster):
         fallback_name="Balance threshold, kWh [10..500]",
     )
     .adds(TuyaElectricalMeasurement)
+    # The meter only sends energy, thresholds and alarm settings when asked for them
+    # (Tuya data query, command 0x03) -- same as zigbee2mqtt's queryOnConfigure.
+    .tuya_enchantment(data_query_spell=True)
     .skip_configuration()
     .add_to_registry()
 )
